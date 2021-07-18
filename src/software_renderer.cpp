@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
+#include <deque>
 
 #include "triangulation.h"
 
@@ -242,16 +243,275 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
                                           float x1, float y1,
                                           Color color) {
 
-  // Task 2: 
-  // Implement line rasterization
+    float width = 0;
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    float empty;
+
+    float x,y;
+
+    float width2 = width / std::cos(std::atan(abs(dx/dy))) / 2;
+    float width3 = width / std::cos(std::atan(abs(dy/dx))) / 2;
+
+    if (abs(dx) > abs(dy)) {
+        if (x1 < x0) {
+            std::swap(x0, x1);
+            std::swap(y0, y1);
+        }
+        for (int i = 0; i < abs(dx); i++) {
+            x = x0 + i;
+            y = dy/dx * i + y0;
+            rasterize_point(x, y - width3 - 1, color * ( 1 - std::modf(y0 - width3, &empty)) );
+            for (float i = y - width3; i < y + width3; i = i + 1) {
+                rasterize_point(x, i, color);
+            }
+            rasterize_point(x, y + width3, color * std::modf(y0 + width3, &empty));
+        }
+    }
+    else {
+        if (y1 < y0) {
+            std::swap(x0, x1);
+            std::swap(y0, y1);
+        }
+        for (int i = 0; i < abs(dy); i++) {
+            y = y0 + i;
+            x = dx/dy * i + x0;
+            rasterize_point(x - width2 - 1, y, color * ( 1 - std::modf(x0 - width2, &empty)) );
+            for (float i = x - width2; i < x + width2; i = i + 1) {
+                rasterize_point(i, y, color);
+            }
+            rasterize_point(x + width2, y, color * std::modf(x0 + width2, &empty));
+
+        }
+    }
 }
+
+double length(double x, double y) {
+    return sqrt(x * x + y * y);
+}
+
+double area(double s, double a, double b, double c) {
+    return std::sqrt(s * (s - a) * (s - b) * (s - c));
+}
+
+float sign (Point p1, Point p2, Point p3)
+{
+    Vector2D v1, v2, v3;
+    v1 = p1.position;
+    v2 = p2.position;
+    v3 = p3.position;
+    return (v1.x - v3.x) * (v2.y - v3.y) - (v2.x - v3.x) * (v1.y - v3.y);
+}
+
+bool pointTriangleAreaTest(Point pt, Point p1, Point p2, Point p3, double eps = 1e-3) {
+    double a, b, c, x, y;
+    double q, w, e;
+    double P1, P2, P3;
+    double S1, S2, S3;
+    double S, P;
+    int sx, sy;
+
+    Vector2D v1, v2, v3, v;
+    v1 = p1.position;
+    v2 = p2.position;
+    v3 = p3.position;
+    v = pt.position;
+
+    a = length(v1.x - v2.x, v1.y - v2.y);
+    b = length(v2.x - v3.x, v2.y - v3.y);
+    c = length(v3.x - v1.x, v3.y - v1.y);
+    P = (a + b + c) / 2;
+    S = area(P, a, b, c);
+
+    q = length(v1.x - v.x, v1.y - v.y);
+    w = length(v2.x -v.x, v2.y - v.y);
+    e = length(v3.x - v.x, v3.y - v.y);
+
+    P1 = (a + q + w) / 2;
+    P2 = (b + w + e) / 2;
+    P3 = (c + e + q) / 2;
+    S1 = area(P1, a, q, w);
+    S2 = area(P2, b, w, e);
+    S3 = area(P3, c, e, q);
+    return (abs(S  - (S1 + S2 + S3)) < eps);
+}
+
+bool pointTriangleTest (Point pt, Point v1, Point v2, Point v3)
+{
+    float d1, d2, d3;
+    bool has_neg, has_pos;
+
+    d1 = sign(pt, v1, v2);
+    d2 = sign(pt, v2, v3);
+    d3 = sign(pt, v3, v1);
+
+    has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+    return !(has_neg && has_pos);
+}
+
+bool onSegment(Point p, Point q, Point r)
+{
+    Vector2D v1, v2, v3;
+    v1 = p.position;
+    v2 = q.position;
+    v3 = r.position;
+    if (v2.x <= max(v1.x, v3.x) && v2.x >= min(v1.x, v3.x) &&
+        v2.y <= max(v1.y, v3.y) && v2.y >= min(v1.y, v3.y))
+        return true;
+
+    return false;
+}
+
+int orientation(Point p, Point q, Point r)
+{
+    Vector2D v1, v2, v3;
+    v1 = p.position;
+    v2 = q.position;
+    v3 = r.position;
+    int val = (v2.y - v1.y) * (v3.x - v2.x) -
+              (v2.x - v1.x) * (v3.y - v2.y);
+
+    if (val == 0) return 0;  // colinear
+
+    return (val > 0)? 1: 2; // clock or counterclock wise
+}
+
+bool segmentsTest(Point p1, Point q1, Point p2, Point q2)
+{
+    // Find the four orientations needed for general and
+    // special cases
+    int o1 = orientation(p1, q1, p2);
+    int o2 = orientation(p1, q1, q2);
+    int o3 = orientation(p2, q2, p1);
+    int o4 = orientation(p2, q2, q1);
+
+    // General case
+    if (o1 != o2 && o3 != o4)
+        return true;
+
+    // Special Cases
+    // p1, q1 and p2 are colinear and p2 lies on segment p1q1
+    if (o1 == 0 && onSegment(p1, p2, q1)) return true;
+
+    // p1, q1 and q2 are colinear and q2 lies on segment p1q1
+    if (o2 == 0 && onSegment(p1, q2, q1)) return true;
+
+    // p2, q2 and p1 are colinear and p1 lies on segment p2q2
+    if (o3 == 0 && onSegment(p2, p1, q2)) return true;
+
+    // p2, q2 and q1 are colinear and q1 lies on segment p2q2
+    if (o4 == 0 && onSegment(p2, q1, q2)) return true;
+
+    return false; // Doesn't fall in any of the above cases
+}
+struct BoundingBox {
+    double x_min, x_max, y_min, y_max;
+
+    BoundingBox GetLU() {
+        return {x_min, (x_max + x_min) / 2, y_min, (y_max + y_min) / 2};
+    };
+
+    BoundingBox GetRU() {
+        return {(x_max + x_min) / 2, x_max, y_min, (y_max + y_min) / 2};
+    };
+    BoundingBox GetLD() {
+        return {x_min, (x_max + x_min) / 2, (y_max + y_min) / 2, y_max};
+    };
+    BoundingBox GetRD() {
+        return {(x_max + x_min) / 2, x_max, (y_max + y_min) / 2, y_max};
+    };
+};
+
+bool boxPointTest(BoundingBox box, Point p1, Point p2, Point p3) {
+    Point bp1, bp2, bp3, bp4;
+    bp1.position = Vector2D(box.x_min, box.y_min);
+    bp2.position = Vector2D(box.x_min, box.y_max);
+    bp3.position = Vector2D(box.x_max, box.y_max);
+    bp4.position = Vector2D(box.x_max, box.y_min);
+    Point boxPoints[4] = {bp1, bp2, bp3, bp4};
+    Point trianglePoints[3] = {p1, p2, p3};
+
+    for (auto bp: boxPoints) {
+        if (pointTriangleTest(bp, p1, p2, p3))
+            return true;
+    }
+
+    Point a1, a2, b1, b2;
+    for (int i = 0 ; i < 4; i++){
+        a1 = boxPoints[i];
+        a2 = boxPoints[(i + 1) % 4];
+        for (int j = 0; j < 3; j++) {
+            b1 = trianglePoints[i];
+            b2 = trianglePoints[(i + 1) % 3];
+            if (segmentsTest(a1, a2, b1, b2))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+float MIN_BOX_SIZE = 100000;
 
 void SoftwareRendererImp::rasterize_triangle( float x0, float y0,
                                               float x1, float y1,
                                               float x2, float y2,
                                               Color color ) {
-  // Task 3: 
-  // Implement triangle rasterization
+
+    float b1, b2, a1, a2;
+    b2 = std::max({x0, x1, x2});
+    b1 = std::min({x0, x1, x2});
+    a2 = std::max({y0, y1, y2});
+    a1 = std::min({y0, y1, y2});
+
+    Point p1, p2, p3, p4;
+    double x,y;
+    int sx, sy;
+
+    p1 = Point();
+    p1.position = Vector2D(x0, y0);
+    p2 = Point();
+    p2.position = Vector2D(x1, y1);
+    p3 = Point();
+    p3.position = Vector2D(x2, y2);
+
+    BoundingBox intial = {b1,b2, a1,a2};
+    BoundingBox box;
+    std::deque<BoundingBox> boundingBoxes({intial});
+
+    while (!boundingBoxes.empty()) {
+        box = boundingBoxes[0];
+        boundingBoxes.pop_front();
+        if ((box.x_max - box.x_min) < MIN_BOX_SIZE) {
+            for (int i = box.x_min; i < box.x_max; i++) {
+                for (int j = box.y_min; j < box.y_max; j++) {
+                    x = i + 0.5f;
+                    y = j + 0.5f;
+                    p4 = Point();
+                    p4.position = Vector2D(x, y);
+
+                    bool inTriangle = pointTriangleTest(p4, p1, p2, p3);
+                    if (inTriangle) {
+                        sx = (int) floor(x);
+                        sy = (int) floor(y);
+                        render_target[4 * (sx + sy * target_w)    ] = (uint8_t) (color.r * 255);
+                        render_target[4 * (sx + sy * target_w) + 1] = (uint8_t) (color.g * 255);
+                        render_target[4 * (sx + sy * target_w) + 2] = (uint8_t) (color.b * 255);
+                        render_target[4 * (sx + sy * target_w) + 3] = (uint8_t) (color.a * 255);
+                    }
+                }
+            }
+        } else {
+            if (boxPointTest(box, p1, p2, p3)) {
+                boundingBoxes.push_back(box.GetLD());
+                boundingBoxes.push_back(box.GetLU());
+                boundingBoxes.push_back(box.GetRD());
+                boundingBoxes.push_back(box.GetRU());
+            }
+        }
+    }
 
 }
 
