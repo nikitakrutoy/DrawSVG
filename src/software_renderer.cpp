@@ -243,7 +243,7 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
                                           float x1, float y1,
                                           Color color) {
 
-    float width = 0;
+    float width = 2;
     float dx = x1 - x0;
     float dy = y1 - y0;
     float empty;
@@ -261,11 +261,11 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
         for (int i = 0; i < abs(dx); i++) {
             x = x0 + i;
             y = dy/dx * i + y0;
-            rasterize_point(x, y - width3 - 1, color * ( 1 - std::modf(y0 - width3, &empty)) );
-            for (float i = y - width3; i < y + width3; i = i + 1) {
-                rasterize_point(x, i, color);
+            rasterize_point(x, y - width3 - 1, color * ( 1 - std::modf(y - width3, &empty)) );
+            for (float j = y - width3; j < y + width3; j = j + 1) {
+                rasterize_point(x, j, color);
             }
-            rasterize_point(x, y + width3, color * std::modf(y0 + width3, &empty));
+            rasterize_point(x, y + width3, color * std::modf(y + width3, &empty));
         }
     }
     else {
@@ -276,11 +276,11 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
         for (int i = 0; i < abs(dy); i++) {
             y = y0 + i;
             x = dx/dy * i + x0;
-            rasterize_point(x - width2 - 1, y, color * ( 1 - std::modf(x0 - width2, &empty)) );
-            for (float i = x - width2; i < x + width2; i = i + 1) {
-                rasterize_point(i, y, color);
+            rasterize_point(x - width2 - 1, y, color * ( 1 - std::modf(x - width2, &empty)) );
+            for (float j = x - width2; j < x + width2; j = j + 1) {
+                rasterize_point(j, y, color);
             }
-            rasterize_point(x + width2, y, color * std::modf(x0 + width2, &empty));
+            rasterize_point(x + width2, y, color * std::modf(x + width2, &empty));
 
         }
     }
@@ -304,12 +304,11 @@ float sign (Point p1, Point p2, Point p3)
 }
 
 bool pointTriangleAreaTest(Point pt, Point p1, Point p2, Point p3, double eps = 1e-3) {
-    double a, b, c, x, y;
+    double a, b, c;
     double q, w, e;
     double P1, P2, P3;
     double S1, S2, S3;
     double S, P;
-    int sx, sy;
 
     Vector2D v1, v2, v3, v;
     v1 = p1.position;
