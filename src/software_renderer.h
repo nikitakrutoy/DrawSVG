@@ -80,6 +80,9 @@ class SoftwareRendererImp : public SoftwareRenderer {
 
  private:
 
+    std::vector<unsigned char> supersample_target;
+    size_t ss_w, ss_h;
+
   // Primitive Drawing //
 
   // Draws an SVG element
