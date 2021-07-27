@@ -229,33 +229,52 @@ void SoftwareRendererImp::draw_group( Group& group ) {
 // The input arguments in the rasterization functions 
 // below are all defined in screen space coordinates
 
+inline void uint8_to_float( float dst[4], unsigned char* src ) {
+    uint8_t* src_uint8 = (uint8_t *)src;
+    dst[0] = src_uint8[0] / 255.f;
+    dst[1] = src_uint8[1] / 255.f;
+    dst[2] = src_uint8[2] / 255.f;
+    dst[3] = src_uint8[3] / 255.f;
+}
+
+inline void float_to_uint8( unsigned char* dst, float src[4] ) {
+    uint8_t* dst_uint8 = (uint8_t *)dst;
+    dst_uint8[0] = (uint8_t) ( 255.f * max( 0.0f, min( 1.0f, src[0])));
+    dst_uint8[1] = (uint8_t) ( 255.f * max( 0.0f, min( 1.0f, src[1])));
+    dst_uint8[2] = (uint8_t) ( 255.f * max( 0.0f, min( 1.0f, src[2])));
+    dst_uint8[3] = (uint8_t) ( 255.f * max( 0.0f, min( 1.0f, src[3])));
+}
+
 void SoftwareRendererImp::rasterize_point( float x, float y, Color color ) {
 
   // fill in the nearest pixel
   int sx = (int) floor(x);
   int sy = (int) floor(y);
-  if (sample_rate > 1) {
-      if ( sx < 0 || sx >= ss_w ) return;
-      if ( sy < 0 || sy >= ss_h ) return;
+  int w, h;
+  unsigned char* target;
 
-      // fill sample - NOT doing alpha blending!
-      supersample_target[4 * (sx + sy * ss_w)    ] = (uint8_t) (color.r * 255);
-      supersample_target[4 * (sx + sy * ss_w) + 1] = (uint8_t) (color.g * 255);
-      supersample_target[4 * (sx + sy * ss_w) + 2] = (uint8_t) (color.b * 255);
-      supersample_target[4 * (sx + sy * ss_w) + 3] = (uint8_t) (color.a * 255);
-      return;
+  Color backgroundColor = Color();
+  if (sample_rate > 1) {
+      w = ss_w;
+      h = ss_h;
+      target = &supersample_target[0];
+  } else {
+      w = target_w;
+      h = target_h;
+      target = render_target;
   }
 
   // check bounds
-  if ( sx < 0 || sx >= target_w ) return;
-  if ( sy < 0 || sy >= target_h ) return;
+    if ( sx < 0 || sx >= w ) return;
+    if ( sy < 0 || sy >= h ) return;
 
-  // fill sample - NOT doing alpha blending!
-  render_target[4 * (sx + sy * target_w)    ] = (uint8_t) (color.r * 255);
-  render_target[4 * (sx + sy * target_w) + 1] = (uint8_t) (color.g * 255);
-  render_target[4 * (sx + sy * target_w) + 2] = (uint8_t) (color.b * 255);
-  render_target[4 * (sx + sy * target_w) + 3] = (uint8_t) (color.a * 255);
+    uint8_to_float(&backgroundColor.r, &target[4 * (sx + sy * w)]);
+    color.r  = color.r * color.a + backgroundColor.r * (1.f - color.a);
+    color.g  = color.g * color.a + backgroundColor.g * (1.f - color.a);
+    color.b  = color.b * color.a + backgroundColor.b * (1.f - color.a);
+    color.a = 1.f - (1 - color.a) * (1 - backgroundColor.a);
 
+    float_to_uint8(&target[4 * (sx + sy * w)], &color.r);
 }
 
 void SoftwareRendererImp::rasterize_line( float x0, float y0,
@@ -276,6 +295,8 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
     float width2 = width / std::cos(std::atan(abs(dx/dy))) / 2;
     float width3 = width / std::cos(std::atan(abs(dy/dx))) / 2;
 
+    Color c1, c2;
+
     if (abs(dx) > abs(dy)) {
         if (x1 < x0) {
             std::swap(x0, x1);
@@ -284,11 +305,15 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
         for (int i = 0; i < abs(dx); i++) {
             x = x0 + i;
             y = dy/dx * i + y0;
-            rasterize_point(x, y - width3 - 1, color * ( 1 - std::modf(y - width3, &empty)) );
-            for (float j = y - width3; j < y + width3; j = j + 1) {
+            c1 = color;
+            c2 = color;
+            c1.a = ( 1 - std::modf(abs(y - width3), &empty));
+            c2.a = std::modf(abs(y + width3), &empty);
+            rasterize_point(x, y - width3 - 1, c1);
+            for (float j = y - width3; j < floor(y + width3); j = j + 1) {
                 rasterize_point(x, j, color);
             }
-            rasterize_point(x, y + width3, color * std::modf(y + width3, &empty));
+            rasterize_point(x, y + width3, c2);
         }
     }
     else {
@@ -297,13 +322,17 @@ void SoftwareRendererImp::rasterize_line( float x0, float y0,
             std::swap(y0, y1);
         }
         for (int i = 0; i < abs(dy); i++) {
+            c1 = color;
+            c2 = color;
             y = y0 + i;
             x = dx/dy * i + x0;
-            rasterize_point(x - width2 - 1, y, color * ( 1 - std::modf(x - width2, &empty)) );
-            for (float j = x - width2; j < x + width2; j = j + 1) {
+            c1.a = ( 1 - std::modf(abs(x - width2), &empty));
+            c2.a = std::modf(abs(x + width2), &empty);
+            rasterize_point(x - width2 - 1, y, c1 );
+            for (float j = x - width2; j < floor(x + width2); j = j + 1) {
                 rasterize_point(j, y, color);
             }
-            rasterize_point(x + width2, y, color * std::modf(x + width2, &empty));
+            rasterize_point(x + width2, y, c2);
 
         }
     }

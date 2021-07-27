@@ -1,6 +1,10 @@
 #ifndef CMU462_HARDWARE_RENDERER_H
 #define CMU462_HARDWARE_RENDERER_H
 
+#ifndef GL_SILENCE_DEPRECATION
+#define GL_SILENCE_DEPRECATION
+#endif // GL_SILENCE_DEPRECATION
+
 #include <stdio.h>
 
 #include "CMU462.h"
