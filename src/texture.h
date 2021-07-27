@@ -75,7 +75,6 @@ class Sampler2DImp : public Sampler2D {
   Color sample_trilinear(Texture& tex, 
                          float u, float v, 
                          float u_scale, float v_scale);
-  
 }; // class sampler2DImp
 
 class Sampler2DRef : public Sampler2D {
